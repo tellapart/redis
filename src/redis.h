@@ -50,18 +50,19 @@
 
 typedef long long mstime_t; /* millisecond time type. */
 
-#include "ae.h"      /* Event driven programming library */
-#include "sds.h"     /* Dynamic safe strings */
-#include "dict.h"    /* Hash tables */
-#include "adlist.h"  /* Linked lists */
-#include "zmalloc.h" /* total memory usage aware version of malloc/free */
-#include "anet.h"    /* Networking the easy way */
-#include "ziplist.h" /* Compact list data structure */
-#include "intset.h"  /* Compact integer set structure */
-#include "version.h" /* Version macro */
-#include "util.h"    /* Misc functions useful in many places */
-#include "latency.h" /* Latency monitor API */
-#include "sparkline.h" /* ASII graphs API */
+#include "ae.h"         /* Event driven programming library */
+#include "sds.h"        /* Dynamic safe strings */
+#include "dict.h"       /* Hash tables */
+#include "adlist.h"     /* Linked lists */
+#include "zmalloc.h"    /* total memory usage aware version of malloc/free */
+#include "anet.h"       /* Networking the easy way */
+#include "ziplist.h"    /* Compact list data structure */
+#include "intset.h"     /* Compact integer set structure */
+#include "version.h"    /* Version macro */
+#include "util.h"       /* Misc functions useful in many places */
+#include "latency.h"    /* Latency monitor API */
+#include "sparkline.h"  /* ASII graphs API */
+#include "percentile.h" /* Percentile reservoire sampling */
 
 /* Error codes */
 #define REDIS_OK                0
@@ -927,7 +928,11 @@ struct redisCommand {
     int lastkey;  /* The last argument that's a key */
     int keystep;  /* The step between first and last key */
     long long microseconds, calls;
+    sampleReservoire samples;
 };
+
+#define CMDTIME_PERCENTILES_COUNT 5
+const static double CMDTIME_PERCENTILES[] = {.25, .50, .90, .99, .999};
 
 struct redisFunctionSym {
     char *name;
