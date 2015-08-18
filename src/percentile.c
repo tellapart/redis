@@ -42,10 +42,10 @@ void initReservoire(sampleReservoire* samples) {
     }
 }
 
-/* Sample an item into a reservoire. If this is the forst sample in the
+/* Sample an item into a reservoire. If this is the first sample in the
  * reservoire, the array of samples will be allocated. All items will be
- * included in the reservoire unti the maximum number of samples is reached,
- * at which point new samples will be randomly selected for inclusion (or
+ * included in the reservoire until the maximum number of samples is reached,
+ * at which point new samples will be randomly selected for inclusion (and
  * eviction). This alrogithm gurantees that any given sample has a 1/N chance
  * of being in the reservoire, for N total items seen */
 void sampleItem(sampleReservoire* samples, sample_t item) {
@@ -76,12 +76,12 @@ int compare_sample_t(const void *a, const void *b) {
  * corresponding percentiles. */
 void calculatePercentiles(
         sampleReservoire* samples,
-        int numPercentiles,
+        uint numPercentiles,
         const double* percentiles,
         sample_t* results) {
     // No samples in the reservoire.
     if (samples->samples == NULL) {
-        for (int i = 0; i < numPercentiles; i++) {
+        for (uint i = 0; i < numPercentiles; i++) {
           results[i] = 0;
         }
         return;
@@ -91,7 +91,7 @@ void calculatePercentiles(
     qsort(samples->samples, samples->numSamples, sizeof(sample_t), compare_sample_t);
 
     // extract the percentiles
-    for (int i = 0; i < numPercentiles; i++) {
+    for (uint i = 0; i < numPercentiles; i++) {
         results[i] = samples->samples[(int)(samples->numSamples * percentiles[i])];
     }
 

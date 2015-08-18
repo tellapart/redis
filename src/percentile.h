@@ -35,7 +35,7 @@
 typedef long long sample_t;
 
 typedef struct sampleReservoire {
-    sample_t totalItems;
+    long long totalItems;
     uint numSamples;
     sample_t* samples;
 } sampleReservoire;
@@ -47,7 +47,7 @@ void initReservoire(sampleReservoire* samples);
 void sampleItem(sampleReservoire* samples, sample_t item);
 void calculatePercentiles(
     sampleReservoire* samples,
-    int numPercentiles,
+    uint numPercentiles,
     const double* percentiles,
     sample_t* results);
 

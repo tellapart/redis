@@ -3020,9 +3020,8 @@ sds genRedisInfoString(char *section) {
                 (c->calls == 0) ? 0 : ((float)c->microseconds/c->calls));
             for (int i = 0; i < CMDTIME_PERCENTILES_COUNT; i++) {
                 info = sdscatprintf(info,
-                ",p%d=%lld",
-                (int)(CMDTIME_PERCENTILES[i] * 1000), percentiles[i]);
-
+                    ",p%d=%lld",
+                    (int)(CMDTIME_PERCENTILES[i] * 1000), percentiles[i]);
             }
             info = sdscatprintf(info, "\r\n");
 
