@@ -46,12 +46,11 @@ void percentileReservoirDeallocate(percentileSampleReservoir* reservoir) {
     }
 }
 
-/* Sample an item into a reservoir. If this is the first sample in the
- * reservoir, the array of samples will be allocated. All items will be
- * included in the reservoir until the maximum number of samples is reached,
- * at which point new samples will be randomly selected for inclusion (and
- * eviction). This alrogithm gurantees that any given sample has a 1/N chance
- * of being in the reservoir, for N total items seen */
+/* Sample an item into a reservoir. All items will be included in the reservoir
+ * until the maximum number of samples is reached, at which point new samples
+ * will be randomly selected for inclusion (and eviction). This algorithm
+ * gurantees that any given sample has a 1/N chance of being in the reservoir,
+ * for N total items seen */
 void percentileSampleItem(percentileSampleReservoir* reservoir, sample_t item) {
     if (reservoir->totalItems < PERCENTILE_SAMPLE_COUNT) {
         reservoir->samples[reservoir->totalItems] = item;
