@@ -30,24 +30,23 @@
 #ifndef __PERCENTILE_H
 #define __PERCENTILE_H
 
-#define PERCENTILE_NUM_SAMPLES 1024
+#define PERCENTILE_SAMPLE_COUNT 1024
 
 typedef long long sample_t;
 
-typedef struct sampleReservoire {
+typedef struct percentileSampleReservoir {
     long long totalItems;
-    uint numSamples;
-    sample_t* samples;
-} sampleReservoire;
-
-#define RESERVOIRE_INIT {0,0,NULL}
+    sample_t samples[PERCENTILE_SAMPLE_COUNT];
+} percentileSampleReservoir;
 
 /* Exported API */
-void initReservoire(sampleReservoire* samples);
-void sampleItem(sampleReservoire* samples, sample_t item);
-void calculatePercentiles(
-    sampleReservoire* samples,
-    uint numPercentiles,
+percentileSampleReservoir* percentileReservoirAllocate();
+void percentileReservoirDeallocate(percentileSampleReservoir* reservoir);
+
+void percentileSampleItem(percentileSampleReservoir* reservoir, sample_t item);
+void percentileCalculate(
+    percentileSampleReservoir* reservoir,
+    int numPercentiles,
     const double* percentiles,
     sample_t* results);
 

@@ -388,17 +388,17 @@ void sentinelPublishCommand(redisClient *c);
 void sentinelRoleCommand(redisClient *c);
 
 struct redisCommand sentinelcmds[] = {
-    {"ping",pingCommand,1,"",0,NULL,0,0,0,0,0,RESERVOIRE_INIT},
-    {"sentinel",sentinelCommand,-2,"",0,NULL,0,0,0,0,0,RESERVOIRE_INIT},
-    {"subscribe",subscribeCommand,-2,"",0,NULL,0,0,0,0,0,RESERVOIRE_INIT},
-    {"unsubscribe",unsubscribeCommand,-1,"",0,NULL,0,0,0,0,0,RESERVOIRE_INIT},
-    {"psubscribe",psubscribeCommand,-2,"",0,NULL,0,0,0,0,0,RESERVOIRE_INIT},
-    {"punsubscribe",punsubscribeCommand,-1,"",0,NULL,0,0,0,0,0,RESERVOIRE_INIT},
-    {"publish",sentinelPublishCommand,3,"",0,NULL,0,0,0,0,0,RESERVOIRE_INIT},
-    {"info",sentinelInfoCommand,-1,"",0,NULL,0,0,0,0,0,RESERVOIRE_INIT},
-    {"role",sentinelRoleCommand,1,"l",0,NULL,0,0,0,0,0,RESERVOIRE_INIT},
-    {"client",clientCommand,-2,"rs",0,NULL,0,0,0,0,0,RESERVOIRE_INIT},
-    {"shutdown",shutdownCommand,-1,"",0,NULL,0,0,0,0,0,RESERVOIRE_INIT}
+    {"ping",pingCommand,1,"",0,NULL,0,0,0,0,0,NULL},
+    {"sentinel",sentinelCommand,-2,"",0,NULL,0,0,0,0,0,NULL},
+    {"subscribe",subscribeCommand,-2,"",0,NULL,0,0,0,0,0,NULL},
+    {"unsubscribe",unsubscribeCommand,-1,"",0,NULL,0,0,0,0,0,NULL},
+    {"psubscribe",psubscribeCommand,-2,"",0,NULL,0,0,0,0,0,NULL},
+    {"punsubscribe",punsubscribeCommand,-1,"",0,NULL,0,0,0,0,0,NULL},
+    {"publish",sentinelPublishCommand,3,"",0,NULL,0,0,0,0,0,NULL},
+    {"info",sentinelInfoCommand,-1,"",0,NULL,0,0,0,0,0,NULL},
+    {"role",sentinelRoleCommand,1,"l",0,NULL,0,0,0,0,0,NULL},
+    {"client",clientCommand,-2,"rs",0,NULL,0,0,0,0,0,NULL},
+    {"shutdown",shutdownCommand,-1,"",0,NULL,0,0,0,0,0,NULL}
 };
 
 /* This function overwrites a few normal Redis config default with Sentinel

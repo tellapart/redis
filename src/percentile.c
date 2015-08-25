@@ -32,38 +32,38 @@
 #include "redis.h"
 #include "percentile.h"
 
-/* Initialize or reset a sampleReservoire */
-void initReservoire(sampleReservoire* samples) {
-    samples->totalItems = 0;
-    samples->numSamples = 0;
-    if (samples->samples != NULL) {
-        zfree(samples->samples);
-        samples->samples = NULL;
+#define min(i, j) (((i) < (j)) ? (i) : (j))
+
+percentileSampleReservoir* percentileReservoirAllocate() {
+    percentileSampleReservoir* reservoir = zmalloc(sizeof(percentileSampleReservoir));
+    memset(reservoir, 0, sizeof(percentileSampleReservoir));
+    return reservoir;
+}
+
+void percentileReservoirDeallocate(percentileSampleReservoir* reservoir) {
+    if (reservoir != NULL) {
+        zfree(reservoir);
     }
 }
 
-/* Sample an item into a reservoire. If this is the first sample in the
- * reservoire, the array of samples will be allocated. All items will be
- * included in the reservoire until the maximum number of samples is reached,
+/* Sample an item into a reservoir. If this is the first sample in the
+ * reservoir, the array of samples will be allocated. All items will be
+ * included in the reservoir until the maximum number of samples is reached,
  * at which point new samples will be randomly selected for inclusion (and
  * eviction). This alrogithm gurantees that any given sample has a 1/N chance
- * of being in the reservoire, for N total items seen */
-void sampleItem(sampleReservoire* samples, sample_t item) {
-    if (samples->samples == NULL) {
-        samples->samples = zmalloc(sizeof(sample_t) * PERCENTILE_NUM_SAMPLES);
-    }
-
-    if (samples->numSamples < PERCENTILE_NUM_SAMPLES) {
-        samples->samples[samples->numSamples++] = item;
+ * of being in the reservoir, for N total items seen */
+void percentileSampleItem(percentileSampleReservoir* reservoir, sample_t item) {
+    if (reservoir->totalItems < PERCENTILE_SAMPLE_COUNT) {
+        reservoir->samples[reservoir->totalItems] = item;
     }
     else {
-        long r = random() % (samples->totalItems);
-        if (r < PERCENTILE_NUM_SAMPLES) {
-            samples->samples[r] = item;
+        long r = random() % (reservoir->totalItems);
+        if (r < PERCENTILE_SAMPLE_COUNT) {
+            reservoir->samples[r] = item;
         }
     }
 
-    samples->totalItems++;
+    reservoir->totalItems++;
 }
 
 int compare_sample_t(const void *a, const void *b) {
@@ -72,27 +72,26 @@ int compare_sample_t(const void *a, const void *b) {
     return (*lla > *llb) - (*lla < *llb);
 }
 
-/* Given a reservoire of samples and a list of percent values, calculate the
+/* Given a reservoir of samples and a list of percent values, calculate the
  * corresponding percentiles. */
-void calculatePercentiles(
-        sampleReservoire* samples,
-        uint numPercentiles,
+void percentileCalculate(
+        percentileSampleReservoir* reservoir,
+        int numPercentiles,
         const double* percentiles,
         sample_t* results) {
-    // No samples in the reservoire.
-    if (samples->samples == NULL) {
-        for (uint i = 0; i < numPercentiles; i++) {
-          results[i] = 0;
-        }
+    // No samples in the reservoir.
+    if (reservoir == NULL) {
+        memset(results, 0, sizeof(*results) * numPercentiles);
         return;
     }
 
     // sort samples
-    qsort(samples->samples, samples->numSamples, sizeof(sample_t), compare_sample_t);
+    int numSamples = min(reservoir->totalItems, PERCENTILE_SAMPLE_COUNT);
+    qsort(reservoir->samples, numSamples, sizeof(sample_t), compare_sample_t);
 
     // extract the percentiles
-    for (uint i = 0; i < numPercentiles; i++) {
-        results[i] = samples->samples[(int)(samples->numSamples * percentiles[i])];
+    for (int i = 0; i < numPercentiles; i++) {
+        results[i] = reservoir->samples[(int)(numSamples * percentiles[i])];
     }
 
 }
