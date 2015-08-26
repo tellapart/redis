@@ -289,7 +289,7 @@ struct redisCommand redisCommandTable[] = {
 
 struct evictionPoolEntry *evictionPoolAlloc(void);
 
-const double CMDTIME_PERCENTILES[CMDTIME_PERCENTILES_COUNT] = {.25, .50, .90, .99, .999};
+const double CMDTIME_PERCENTILES[] = {.25, .50, .90, .99, .999};
 CASSERT(sizeof(CMDTIME_PERCENTILES)/sizeof(*CMDTIME_PERCENTILES) == CMDTIME_PERCENTILES_COUNT);
 
 /*============================ Utility functions ============================ */

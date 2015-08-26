@@ -32,18 +32,16 @@
 #include "redis.h"
 #include "percentile.h"
 
-#define min(i, j) (((i) < (j)) ? (i) : (j))
+#ifndef MIN
+#define MIN(i, j) (((i) < (j)) ? (i) : (j))
+#endif
 
 percentileSampleReservoir* percentileReservoirAllocate() {
-    percentileSampleReservoir* reservoir = zmalloc(sizeof(percentileSampleReservoir));
-    memset(reservoir, 0, sizeof(percentileSampleReservoir));
-    return reservoir;
+    return zcalloc(sizeof(percentileSampleReservoir));
 }
 
 void percentileReservoirDeallocate(percentileSampleReservoir* reservoir) {
-    if (reservoir != NULL) {
-        zfree(reservoir);
-    }
+    zfree(reservoir);
 }
 
 /* Sample an item into a reservoir. All items will be included in the reservoir
@@ -65,7 +63,7 @@ void percentileSampleItem(percentileSampleReservoir* reservoir, sample_t item) {
     reservoir->totalItems++;
 }
 
-int compare_sample_t(const void *a, const void *b) {
+static int compare_sample_t(const void *a, const void *b) {
     const sample_t *lla = (const sample_t*) a;
     const sample_t *llb = (const sample_t*) b;
     return (*lla > *llb) - (*lla < *llb);
@@ -85,7 +83,7 @@ void percentileCalculate(
     }
 
     // sort samples
-    int numSamples = min(reservoir->totalItems, PERCENTILE_SAMPLE_COUNT);
+    int numSamples = MIN(reservoir->totalItems, PERCENTILE_SAMPLE_COUNT);
     qsort(reservoir->samples, numSamples, sizeof(sample_t), compare_sample_t);
 
     // extract the percentiles
