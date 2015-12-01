@@ -436,6 +436,11 @@ void loadServerConfigFromString(char *config) {
             if ((server.cluster_enabled = yesnotoi(argv[1])) == -1) {
                 err = "argument must be 'yes' or 'no'"; goto loaderr;
             }
+        } else if (!strcasecmp(argv[0],"cluster-port") && argc == 2) {
+            server.cluster_port = atoi(argv[1]);
+            if (server.cluster_port < 0 || server.cluster_port > 65535) {
+                err = "Invalid cluster-port"; goto loaderr;
+            }
         } else if (!strcasecmp(argv[0],"cluster-config-file") && argc == 2) {
             zfree(server.cluster_configfile);
             server.cluster_configfile = zstrdup(argv[1]);
@@ -552,6 +557,18 @@ void loadServerConfigFromString(char *config) {
         i = linenum-1;
         err = "slaveof directive not allowed in cluster mode";
         goto loaderr;
+    }
+
+    if (server.cluster_enabled && server.cluster_port == 0) {
+        /* No explicit cluster port, default to server port + offset */
+        server.cluster_port = server.port + REDIS_CLUSTER_PORT_INCR;
+       if  (server.cluster_port > 65535) {
+           err = "port number too high for cluster mode.\n"
+               "By default, the cluster communication port is 10,000 port "
+               "numbers higher than the redis port. Set an explicit cluster "
+               "port or move your redis port number to be lower than 55536.";
+           goto loaderr;
+       }
     }
 
     sdsfreesplitres(lines,totlines);
@@ -1071,6 +1088,7 @@ void configGetCommand(redisClient *c) {
     config_get_numerical_field("min-slaves-to-write",server.repl_min_slaves_to_write);
     config_get_numerical_field("min-slaves-max-lag",server.repl_min_slaves_max_lag);
     config_get_numerical_field("hz",server.hz);
+    config_get_numerical_field("cluster-port",server.cluster_port);
     config_get_numerical_field("cluster-node-timeout",server.cluster_node_timeout);
     config_get_numerical_field("cluster-migration-barrier",server.cluster_migration_barrier);
     config_get_numerical_field("cluster-slave-validity-factor",server.cluster_slave_validity_factor);
@@ -1849,6 +1867,7 @@ int rewriteConfig(char *path) {
     rewriteConfigBytesOption(state,"auto-aof-rewrite-min-size",server.aof_rewrite_min_size,REDIS_AOF_REWRITE_MIN_SIZE);
     rewriteConfigNumericalOption(state,"lua-time-limit",server.lua_time_limit,REDIS_LUA_TIME_LIMIT);
     rewriteConfigYesNoOption(state,"cluster-enabled",server.cluster_enabled,0);
+    rewriteConfigNumericalOption(state,"cluster-port",server.cluster_port,0);
     rewriteConfigStringOption(state,"cluster-config-file",server.cluster_configfile,REDIS_DEFAULT_CLUSTER_CONFIG_FILE);
     rewriteConfigYesNoOption(state,"cluster-require-full-coverage",server.cluster_require_full_coverage,REDIS_CLUSTER_DEFAULT_REQUIRE_FULL_COVERAGE);
     rewriteConfigNumericalOption(state,"cluster-node-timeout",server.cluster_node_timeout,REDIS_CLUSTER_DEFAULT_NODE_TIMEOUT);

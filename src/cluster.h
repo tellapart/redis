@@ -95,7 +95,8 @@ typedef struct clusterNode {
     mstime_t repl_offset_time;  /* Unix time we received offset for this node */
     long long repl_offset;      /* Last known repl offset for this node. */
     char ip[REDIS_IP_STR_LEN];  /* Latest known IP address of this node */
-    int port;                   /* Latest known port of this node */
+    uint16_t port;              /* Latest known service port of this node */
+    uint16_t cluster_port;      /* Latest known cluster port of this node */
     clusterLink *link;          /* TCP/IP link with this node */
     list *fail_reports;         /* List of nodes signaling this as failing */
 } clusterNode;
@@ -168,8 +169,8 @@ typedef struct {
     char ip[REDIS_IP_STR_LEN];  /* IP address last time it was seen */
     uint16_t port;              /* port last time it was seen */
     uint16_t flags;             /* node->flags copy */
-    uint16_t notused1;          /* Some room for future improvements. */
-    uint32_t notused2;
+    uint16_t cluster_port;      /* cluster port last time it was seen. */
+    uint32_t notused1;          /* Some room for future improvements. */
 } clusterMsgDataGossip;
 
 typedef struct {
@@ -233,7 +234,7 @@ typedef struct {
     unsigned char myslots[REDIS_CLUSTER_SLOTS/8];
     char slaveof[REDIS_CLUSTER_NAMELEN];
     char notused1[32];  /* 32 bytes reserved for future usage. */
-    uint16_t port;      /* Sender TCP base port */
+    uint16_t port;      /* Sender TCP service port */
     uint16_t flags;     /* Sender node flags */
     unsigned char state; /* Cluster state from the POV of the sender */
     unsigned char mflags[3]; /* Message flags: CLUSTERMSG_FLAG[012]_... */

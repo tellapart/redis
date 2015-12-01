@@ -125,6 +125,7 @@ int clusterLoadConfig(char *filename) {
         sds *argv;
         clusterNode *n, *master;
         char *p, *s;
+        int port, cluster_port;
 
         /* Skip blank lines, they can be created either by users manually
          * editing nodes.conf or by the config writing process if stopped
@@ -164,11 +165,26 @@ int clusterLoadConfig(char *filename) {
             n = createClusterNode(argv[0],0);
             clusterAddNode(n);
         }
-        /* Address and port */
-        if ((p = strrchr(argv[1],':')) == NULL) goto fmterr;
+        /* Address, port and (optionally) cluster port, separated by ':'
+         * If the cluster port is missing, assume default offset. */
+        s = argv[1];
+        if ((p = strrchr(s,':')) == NULL) goto fmterr;
         *p = '\0';
-        memcpy(n->ip,argv[1],strlen(argv[1])+1);
-        n->port = atoi(p+1);
+        port = atoi(p+1);
+
+        if ((p = strrchr(s,':')) == NULL) {
+            cluster_port = port + REDIS_CLUSTER_PORT_INCR;
+        } else {
+            *p = '\0';
+            cluster_port = port;
+            port = atoi(p+1);
+        }
+        memcpy(n->ip,s,(int)(p-s+1));
+
+        if (port <= 0 || port > 65535) goto fmterr;
+        if (cluster_port <= 0 || cluster_port > 65535) goto fmterr;
+        n->port = (uint16_t) port;
+        n->cluster_port = (uint16_t) cluster_port;
 
         /* Parse flags */
         p = s = argv[2];
@@ -439,21 +455,8 @@ void clusterInit(void) {
     /* We need a listening TCP port for our cluster messaging needs. */
     server.cfd_count = 0;
 
-    /* Port sanity check II
-     * The other handshake port check is triggered too late to stop
-     * us from trying to use a too-high cluster port number. */
-    if (server.port > (65535-REDIS_CLUSTER_PORT_INCR)) {
-        redisLog(REDIS_WARNING, "Redis port number too high. "
-                   "Cluster communication port is 10,000 port "
-                   "numbers higher than your Redis port. "
-                   "Your Redis port number must be "
-                   "lower than 55535.");
-        exit(1);
-    }
-
-    if (listenToPort(server.port+REDIS_CLUSTER_PORT_INCR,
-        server.cfd,&server.cfd_count) == REDIS_ERR)
-    {
+    if (listenToPort(server.cluster_port,server.cfd,&server.cfd_count) ==
+            REDIS_ERR) {
         exit(1);
     } else {
         int j;
@@ -472,6 +475,7 @@ void clusterInit(void) {
     /* Set myself->port to my listening port, we'll just need to discover
      * the IP address via MEET messages. */
     myself->port = server.port;
+    myself->cluster_port = server.cluster_port;
 
     server.cluster->mf_end = 0;
     resetManualFailover();
@@ -669,6 +673,7 @@ clusterNode *createClusterNode(char *nodename, int flags) {
     node->link = NULL;
     memset(node->ip,0,sizeof(node->ip));
     node->port = 0;
+    node->cluster_port = 0;
     node->fail_reports = listCreate();
     node->voted_time = 0;
     node->repl_offset_time = 0;
@@ -1215,7 +1220,7 @@ void clearNodeFailureIfNeeded(clusterNode *node) {
 /* Return true if we already have a node in HANDSHAKE state matching the
  * specified ip address and port number. This function is used in order to
  * avoid adding a new handshake node for the same address multiple times. */
-int clusterHandshakeInProgress(char *ip, int port) {
+int clusterHandshakeInProgress(char *ip, int port, int cluster_port) {
     dictIterator *di;
     dictEntry *de;
 
@@ -1224,7 +1229,12 @@ int clusterHandshakeInProgress(char *ip, int port) {
         clusterNode *node = dictGetVal(de);
 
         if (!nodeInHandshake(node)) continue;
-        if (!strcasecmp(node->ip,ip) && node->port == port) break;
+        /* If either the service port or cluster port match, this is
+         * effectively the same endpoint since two endpoints can't share
+         * the same service or cluster port on the same instance. */
+        if (!strcasecmp(node->ip,ip) &&
+            (node->port == port || node->cluster_port == cluster_port))
+            break;
     }
     dictReleaseIterator(di);
     return de != NULL;
@@ -1237,7 +1247,7 @@ int clusterHandshakeInProgress(char *ip, int port) {
  *
  * EAGAIN - There is already an handshake in progress for this address.
  * EINVAL - IP or port are not valid. */
-int clusterStartHandshake(char *ip, int port) {
+int clusterStartHandshake(char *ip, int port, int cluster_port) {
     clusterNode *n;
     char norm_ip[REDIS_IP_STR_LEN];
     struct sockaddr_storage sa;
@@ -1257,7 +1267,8 @@ int clusterStartHandshake(char *ip, int port) {
     }
 
     /* Port sanity check */
-    if (port <= 0 || port > (65535-REDIS_CLUSTER_PORT_INCR)) {
+    if (port <= 0 || port > 65535 ||
+            cluster_port <= 0 || cluster_port > 65535) {
         errno = EINVAL;
         return 0;
     }
@@ -1274,7 +1285,7 @@ int clusterStartHandshake(char *ip, int port) {
             (void*)&(((struct sockaddr_in6 *)&sa)->sin6_addr),
             norm_ip,REDIS_IP_STR_LEN);
 
-    if (clusterHandshakeInProgress(norm_ip,port)) {
+    if (clusterHandshakeInProgress(norm_ip, port, cluster_port)) {
         errno = EAGAIN;
         return 0;
     }
@@ -1285,6 +1296,7 @@ int clusterStartHandshake(char *ip, int port) {
     n = createClusterNode(NULL,REDIS_NODE_HANDSHAKE|REDIS_NODE_MEET);
     memcpy(n->ip,norm_ip,sizeof(n->ip));
     n->port = port;
+    n->cluster_port = cluster_port;
     clusterAddNode(n);
     return 1;
 }
@@ -1300,14 +1312,20 @@ void clusterProcessGossipSection(clusterMsg *hdr, clusterLink *link) {
 
     while(count--) {
         uint16_t flags = ntohs(g->flags);
+        uint16_t port = ntohs(g->port);
+        uint16_t cluster_port = ntohs(g->cluster_port);
         clusterNode *node;
         sds ci;
 
+        if (cluster_port == 0)
+            cluster_port = port + REDIS_CLUSTER_PORT_INCR;
+
         ci = representRedisNodeFlags(sdsempty(), flags);
-        redisLog(REDIS_DEBUG,"GOSSIP %.40s %s:%d %s",
+        redisLog(REDIS_DEBUG,"GOSSIP %.40s %s:%d:%d %s",
             g->nodename,
             g->ip,
-            ntohs(g->port),
+            port,
+            cluster_port,
             ci);
         sdsfree(ci);
 
@@ -1339,9 +1357,10 @@ void clusterProcessGossipSection(clusterMsg *hdr, clusterLink *link) {
              * into a node address update if the handshake will be
              * successful. */
             if (node->flags & (REDIS_NODE_FAIL|REDIS_NODE_PFAIL) &&
-                (strcasecmp(node->ip,g->ip) || node->port != ntohs(g->port)))
+                (strcasecmp(node->ip,g->ip) || node->port != port ||
+                 node->cluster_port != cluster_port))
             {
-                clusterStartHandshake(g->ip,ntohs(g->port));
+                clusterStartHandshake(g->ip,port,cluster_port);
             }
         } else {
             /* If it's not in NOADDR state and we don't have it, we
@@ -1354,7 +1373,7 @@ void clusterProcessGossipSection(clusterMsg *hdr, clusterLink *link) {
                 !(flags & REDIS_NODE_NOADDR) &&
                 !clusterBlacklistExists(g->nodename))
             {
-                clusterStartHandshake(g->ip,ntohs(g->port));
+                clusterStartHandshake(g->ip,port,cluster_port);
             }
         }
 
@@ -1656,6 +1675,8 @@ int clusterProcessPacket(clusterLink *link) {
 
             node = createClusterNode(NULL,REDIS_NODE_HANDSHAKE);
             nodeIp2String(node->ip,link);
+            /* The cluster port is not located in the header but can found in
+             * the gossip section (processed below). */
             node->port = ntohs(hdr->port);
             clusterAddNode(node);
             clusterDoBeforeSleep(CLUSTER_TODO_SAVE_CONFIG);
@@ -2264,8 +2285,8 @@ void clusterSendPing(clusterLink *link, int type) {
         memcpy(gossip->ip,this->ip,sizeof(this->ip));
         gossip->port = htons(this->port);
         gossip->flags = htons(this->flags);
+        gossip->cluster_port = htons(this->cluster_port);
         gossip->notused1 = 0;
-        gossip->notused2 = 0;
         gossipcount++;
     }
 
@@ -3068,7 +3089,7 @@ void clusterCron(void) {
             clusterLink *link;
 
             fd = anetTcpNonBlockBindConnect(server.neterr, node->ip,
-                node->port+REDIS_CLUSTER_PORT_INCR, REDIS_BIND_ADDR);
+                node->cluster_port, REDIS_BIND_ADDR);
             if (fd == -1) {
                 /* We got a synchronous error from connect before
                  * clusterSendPing() had a chance to be called.
@@ -3078,7 +3099,7 @@ void clusterCron(void) {
                 if (node->ping_sent == 0) node->ping_sent = mstime();
                 redisLog(REDIS_DEBUG, "Unable to connect to "
                     "Cluster Node [%s]:%d -> %s", node->ip,
-                    node->port+REDIS_CLUSTER_PORT_INCR,
+                    node->cluster_port,
                     server.neterr);
                 continue;
             }
@@ -3110,7 +3131,7 @@ void clusterCron(void) {
             node->flags &= ~REDIS_NODE_MEET;
 
             redisLog(REDIS_DEBUG,"Connecting with Node %.40s at %s:%d",
-                    node->name, node->ip, node->port+REDIS_CLUSTER_PORT_INCR);
+                    node->name, node->ip, node->cluster_port);
         }
     }
     dictReleaseIterator(di);
@@ -3628,10 +3649,15 @@ sds clusterGenNodeDescription(clusterNode *node) {
     sds ci;
 
     /* Node coordinates */
-    ci = sdscatprintf(sdsempty(),"%.40s %s:%d ",
-        node->name,
-        node->ip,
-        node->port);
+    ci = sdscatprintf(sdsempty(),"%.40s ", node->name);
+
+    if (node->cluster_port != node->port + REDIS_CLUSTER_PORT_INCR)
+        ci = sdscatprintf(ci, "%s:%d:%d ",
+            node->ip,
+            node->port,
+            node->cluster_port);
+    else
+        ci = sdscatprintf(ci, "%s:%d ", node->ip, node->port);
 
     /* Flags */
     ci = representRedisNodeFlags(ci, node->flags);
@@ -3810,16 +3836,26 @@ void clusterCommand(redisClient *c) {
         return;
     }
 
-    if (!strcasecmp(c->argv[1]->ptr,"meet") && c->argc == 4) {
+    if (!strcasecmp(c->argv[1]->ptr,"meet") && c->argc >= 4 && c->argc <= 5) {
         long long port;
+        long long cluster_port;
 
         if (getLongLongFromObject(c->argv[3], &port) != REDIS_OK) {
             addReplyErrorFormat(c,"Invalid TCP port specified: %s",
                                 (char*)c->argv[3]->ptr);
             return;
         }
+        if (c->argc > 4) {
+            if (getLongLongFromObject(c->argv[4], &cluster_port) != REDIS_OK) {
+                addReplyErrorFormat(c, "Invalid TCP port specified: %s",
+                                    (char*)c->argv[4]->ptr);
+                return;
+            }
+        } else {
+            cluster_port = port + REDIS_CLUSTER_PORT_INCR;
+        }
 
-        if (clusterStartHandshake(c->argv[2]->ptr,port) == 0 &&
+        if (clusterStartHandshake(c->argv[2]->ptr,port,cluster_port) == 0 &&
             errno == EINVAL)
         {
             addReplyErrorFormat(c,"Invalid node address specified: %s:%s",
