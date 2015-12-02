@@ -10,6 +10,19 @@ HIGH:     There is a critical bug that may affect a subset of users. Upgrade!
 CRITICAL: There is a critical bug affecting MOST USERS. Upgrade ASAP.
 --------------------------------------------------------------------------------
 
+--[ Redis 3.0.5.ta.2 ] Release date: 2 Dec 2015
+
+Upgrade urgency: LOW for Redis and Sentinel
+
+* [NEW] Support explicit cluster bus port for use cases where service
+        port + 10K is inappropriate. (Michael Kralka)
+
+--[ Redis 3.0.5.ta.1 ] Release date: 25 Nov 2015
+
+Upgrade urgency: LOW for Redis and Sentinel
+
+* [NEW] Collect and report command latency percentiles (Kevin Ballard)
+
 --[ Redis 3.0.5 ] Release date: 15 Oct 2015
 
 Upgrade urgency: MODERATE, the most important thing is a fix in the replication
